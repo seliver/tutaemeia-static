@@ -33,6 +33,7 @@ jobs:
               -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
           })"
           account_id="$(jq -r '.result[0].account.id // empty' <<<"${zone_response}")"
+          zone_id="$(jq -r '.result[0].id // empty' <<<"${zone_response}")"
 
           if [[ -z "${account_id}" ]]; then
             account_response="$({
@@ -43,14 +44,16 @@ jobs:
             account_id="$(jq -r 'if (.result | length) == 1 then .result[0].id else empty end' <<<"${account_response}")"
           fi
 
-          if [[ -z "${account_id}" ]]; then
+          if [[ -z "${account_id}" || -z "${zone_id}" ]]; then
             echo 'The token could not resolve exactly one Cloudflare account.' >&2
             jq -c '{success, errors}' <<<"${zone_response}" >&2
             exit 1
           fi
 
           echo "::add-mask::${account_id}"
+          echo "::add-mask::${zone_id}"
           echo "account_id=${account_id}" >> "${GITHUB_OUTPUT}"
+          echo "zone_id=${zone_id}" >> "${GITHUB_OUTPUT}"
 
       - name: Ensure the Pages project exists
         env:
@@ -118,6 +121,50 @@ jobs:
                 -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
                 -H 'Content-Type: application/json' \
                 --data "$(jq -cn --arg domain "${domain}" '{name: $domain}')"
+            })"
+            jq -e '.success == true' <<<"${response}" >/dev/null || {
+              jq -c '{success, errors}' <<<"${response}" >&2
+              exit 1
+            }
+          done
+
+      - name: Point the public domains to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ steps.cloudflare.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+
+          for domain in tutaemeia.pt www.tutaemeia.pt; do
+            current="$({
+              curl -sS --get \
+                "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records" \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                --data-urlencode "name=${domain}"
+            })"
+            jq -e '.success == true' <<<"${current}" >/dev/null || {
+              jq -c '{success, errors}' <<<"${current}" >&2
+              exit 1
+            }
+
+            while IFS= read -r record_id; do
+              response="$({
+                curl -sS -X DELETE \
+                  "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${record_id}" \
+                  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+              })"
+              jq -e '.success == true' <<<"${response}" >/dev/null || {
+                jq -c '{success, errors}' <<<"${response}" >&2
+                exit 1
+              }
+            done < <(jq -r '.result[] | select(.type == "A" or .type == "AAAA" or .type == "CNAME") | .id' <<<"${current}")
+
+            response="$({
+              curl -sS -X POST \
+                "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records" \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                -H 'Content-Type: application/json' \
+                --data "$(jq -cn --arg name "${domain}" '{type: "CNAME", name: $name, content: "tutaemeia.pages.dev", proxied: true, ttl: 1}')"
             })"
             jq -e '.success == true' <<<"${response}" >/dev/null || {
               jq -c '{success, errors}' <<<"${response}" >&2
