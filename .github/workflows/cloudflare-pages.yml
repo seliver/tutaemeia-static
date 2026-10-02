@@ -1,0 +1,126 @@
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-pages-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the site
+        uses: actions/checkout@v4
+
+      - name: Resolve the Cloudflare account
+        id: cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          zone_response="$({
+            curl -sS \
+              'https://api.cloudflare.com/client/v4/zones?name=tutaemeia.pt' \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          })"
+          account_id="$(jq -r '.result[0].account.id // empty' <<<"${zone_response}")"
+
+          if [[ -z "${account_id}" ]]; then
+            account_response="$({
+              curl -sS \
+                'https://api.cloudflare.com/client/v4/accounts' \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+            })"
+            account_id="$(jq -r 'if (.result | length) == 1 then .result[0].id else empty end' <<<"${account_response}")"
+          fi
+
+          if [[ -z "${account_id}" ]]; then
+            echo 'The token could not resolve exactly one Cloudflare account.' >&2
+            jq -c '{success, errors}' <<<"${zone_response}" >&2
+            exit 1
+          fi
+
+          echo "::add-mask::${account_id}"
+          echo "account_id=${account_id}" >> "${GITHUB_OUTPUT}"
+
+      - name: Ensure the Pages project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cloudflare.outputs.account_id }}
+        run: |
+          set -euo pipefail
+
+          response="$({
+            curl -sS \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/tutaemeia" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          })"
+
+          if jq -e '.success == true' <<<"${response}" >/dev/null; then
+            exit 0
+          fi
+
+          response="$({
+            curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              --data '{"name":"tutaemeia","production_branch":"main"}'
+          })"
+          jq -e '.success == true' <<<"${response}" >/dev/null || {
+            jq -c '{success, errors}' <<<"${response}" >&2
+            exit 1
+          }
+
+      - name: Prepare the static artifact
+        run: |
+          set -euo pipefail
+          mkdir -p .cloudflare-dist
+          cp index.html 404.html styles.css .cloudflare-dist/
+
+      - name: Deploy the production site
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ steps.cloudflare.outputs.account_id }}
+          command: pages deploy .cloudflare-dist --project-name=tutaemeia --branch=main --commit-hash=${{ github.sha }}
+
+      - name: Register the custom domains
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cloudflare.outputs.account_id }}
+        run: |
+          set -euo pipefail
+
+          current="$({
+            curl -sS \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/tutaemeia/domains" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          })"
+
+          for domain in tutaemeia.pt www.tutaemeia.pt; do
+            if jq -e --arg domain "${domain}" 'any(.result[]?; .name == $domain)' <<<"${current}" >/dev/null; then
+              continue
+            fi
+
+            response="$({
+              curl -sS -X POST \
+                "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/tutaemeia/domains" \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                -H 'Content-Type: application/json' \
+                --data "$(jq -cn --arg domain "${domain}" '{name: $domain}')"
+            })"
+            jq -e '.success == true' <<<"${response}" >/dev/null || {
+              jq -c '{success, errors}' <<<"${response}" >&2
+              exit 1
+            }
+          done
