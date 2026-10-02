@@ -88,7 +88,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .cloudflare-dist
-          cp index.html 404.html styles.css .cloudflare-dist/
+          cp index.html 404.html styles.css favicon.svg .cloudflare-dist/
 
       - name: Deploy the production site
         uses: cloudflare/wrangler-action@v3

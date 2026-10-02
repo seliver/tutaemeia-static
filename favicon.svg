@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="8" fill="#090908"/>
+  <path d="M32 5 54 13 59 32 54 51 32 59 10 51 5 32 10 13Z" fill="#14221e" stroke="#c8aa70"/>
+  <path d="m10 13 22 19L54 13M5 32h54M10 51l22-19 22 19M32 5v54" fill="none" stroke="#c8aa70" stroke-opacity=".32"/>
+  <circle cx="32" cy="32" r="12" fill="#090908" stroke="#eed79f" stroke-opacity=".5"/>
+  <text x="32" y="37" fill="#eed79f" font-family="Georgia,serif" font-size="14" text-anchor="middle">TM</text>
+</svg>
