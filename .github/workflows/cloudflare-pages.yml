@@ -147,6 +147,22 @@ jobs:
               exit 1
             }
 
+            matching_id="$(jq -r '.result[] | select(.type == "CNAME" and .content == "tutaemeia.pages.dev") | .id' <<<"${current}" | head -n 1)"
+            if [[ -n "${matching_id}" ]]; then
+              response="$({
+                curl -sS -X PATCH \
+                  "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${matching_id}" \
+                  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                  -H 'Content-Type: application/json' \
+                  --data '{"proxied":true,"ttl":1}'
+              })"
+              jq -e '.success == true' <<<"${response}" >/dev/null || {
+                jq -c '{success, errors}' <<<"${response}" >&2
+                exit 1
+              }
+              continue
+            fi
+
             while IFS= read -r record_id; do
               response="$({
                 curl -sS -X DELETE \
