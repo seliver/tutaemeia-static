@@ -11,6 +11,14 @@ award homepage and its stylesheet are unchanged. New pages have their own CSS,
 no JavaScript or login, and `noindex, follow` to avoid mixing tool documentation
 with the editorial search presence (this is not an access control).
 
+The owner explicitly requires these pages to remain unlisted: no links from the
+award homepage, existing navigation/footer, 404 page or a sitemap. They remain
+publicly reachable by their exact URLs for Google verification. Links between
+the tool description and its privacy policy are intentional. `noindex` requests
+search exclusion; it is not authentication or a guarantee against discovery.
+The artifact script checks the existing entry pages for research links and
+requires both research pages to retain their noindex directives.
+
 The owner authorized finalization and publication on 2026-10-05. Public URLs:
 
 - Homepage: `https://tutaemeia.pt/keyword-research/`
