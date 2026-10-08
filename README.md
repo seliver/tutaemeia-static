@@ -1,8 +1,8 @@
 # Tuta e Meia
 
-Static premium-spotlight landing page for `tutaemeia.pt`, published with Cloudflare Pages.
+Static independent-award landing page for `tutaemeia.pt`, published with Cloudflare Pages.
 
-The first spotlight is intentionally empty while the editorial concept is tested. The retired comparison project remains archived on GitHub. This repository intentionally contains no application code, analytics, cookies, or build step.
+The inaugural award is intentionally empty while the editorial concept is tested. The homepage uses a small progressive-enhancement script to make its optical-glass object respond to light, pointer position and scroll. The retired comparison project remains archived on GitHub. This repository intentionally contains no analytics, cookies, user data, external runtime dependencies, or build step.
 
 ## Keyword Research pages
 
