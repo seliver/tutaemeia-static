@@ -1,0 +1,8 @@
+/styles.css
+  Cache-Control: public, max-age=0, must-revalidate
+
+/lens.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+/favicon.svg
+  Cache-Control: public, max-age=0, must-revalidate

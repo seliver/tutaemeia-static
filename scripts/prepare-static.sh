@@ -22,7 +22,7 @@ done
 
 # Explicit allowlist: never publish repository metadata, documentation or secrets.
 mkdir -p .cloudflare-dist
-cp index.html 404.html styles.css lens.js favicon.svg .cloudflare-dist/
+cp index.html 404.html styles.css lens.js favicon.svg _headers .cloudflare-dist/
 mkdir -p .cloudflare-dist/keyword-research/privacidade
 cp keyword-research/index.html keyword-research/research.css .cloudflare-dist/keyword-research/
 cp keyword-research/privacidade/index.html .cloudflare-dist/keyword-research/privacidade/
