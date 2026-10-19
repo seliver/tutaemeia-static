@@ -1,0 +1,48 @@
+name: Tear down Cloudflare Pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  teardown:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove Pages project and its DNS records
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          zone_response="$(curl -sS \
+            'https://api.cloudflare.com/client/v4/zones?name=tutaemeia.pt' \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")"
+          jq -e '.success == true' <<<"${zone_response}" >/dev/null
+          zone_id="$(jq -r '.result[0].id // empty' <<<"${zone_response}")"
+          account_id="$(jq -r '.result[0].account.id // empty' <<<"${zone_response}")"
+          [[ -n "${zone_id}" && -n "${account_id}" ]]
+
+          for domain in tutaemeia.pt www.tutaemeia.pt; do
+            dns_response="$(curl -sS --get \
+              "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              --data-urlencode "name=${domain}")"
+            jq -e '.success == true' <<<"${dns_response}" >/dev/null
+
+            while IFS= read -r record_id; do
+              delete_response="$(curl -sS -X DELETE \
+                "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${record_id}" \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")"
+              jq -e '.success == true' <<<"${delete_response}" >/dev/null
+            done < <(jq -r '.result[] | select(.type == "CNAME" and .content == "tutaemeia.pages.dev") | .id' <<<"${dns_response}")
+          done
+
+          project_response="$(curl -sS -X DELETE \
+            "https://api.cloudflare.com/client/v4/accounts/${account_id}/pages/projects/tutaemeia?force=true" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")"
+          jq -e '.success == true' <<<"${project_response}" >/dev/null || {
+            jq -c '{success, errors}' <<<"${project_response}" >&2
+            exit 1
+          }
