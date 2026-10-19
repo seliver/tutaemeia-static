@@ -19,7 +19,10 @@ jobs:
           zone_response="$(curl -sS \
             'https://api.cloudflare.com/client/v4/zones?name=tutaemeia.pt' \
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")"
-          jq -e '.success == true' <<<"${zone_response}" >/dev/null
+          jq -e '.success == true' <<<"${zone_response}" >/dev/null || {
+            jq -c '{success, errors}' <<<"${zone_response}" >&2
+            exit 1
+          }
           zone_id="$(jq -r '.result[0].id // empty' <<<"${zone_response}")"
           account_id="$(jq -r '.result[0].account.id // empty' <<<"${zone_response}")"
           [[ -n "${zone_id}" && -n "${account_id}" ]]
@@ -29,13 +32,19 @@ jobs:
               "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
               -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
               --data-urlencode "name=${domain}")"
-            jq -e '.success == true' <<<"${dns_response}" >/dev/null
+            jq -e '.success == true' <<<"${dns_response}" >/dev/null || {
+              jq -c '{success, errors}' <<<"${dns_response}" >&2
+              exit 1
+            }
 
             while IFS= read -r record_id; do
               delete_response="$(curl -sS -X DELETE \
                 "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${record_id}" \
                 -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")"
-              jq -e '.success == true' <<<"${delete_response}" >/dev/null
+              jq -e '.success == true' <<<"${delete_response}" >/dev/null || {
+                jq -c '{success, errors}' <<<"${delete_response}" >&2
+                exit 1
+              }
             done < <(jq -r '.result[] | select(.type == "CNAME" and .content == "tutaemeia.pages.dev") | .id' <<<"${dns_response}")
           done
 
